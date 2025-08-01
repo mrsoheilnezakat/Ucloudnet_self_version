@@ -143,3 +143,22 @@ def _bce_loss_with_aux(pred, target, weight=[1, 0.4, 0.2]):
 
     loss = weight[0] * _1x_loss + weight[1] * _2x_loss + weight[2] * _4x_loss
     return loss, (_1x_loss, _2x_loss, _4x_loss)
+
+if __name__ == "__main__":
+    import paddle
+
+    print("Testing UCloudNet...")
+
+    model = UCloudNet()
+    model.eval()
+
+    dummy_input = paddle.randn([1, 1, 256, 256])
+
+    with paddle.no_grad():
+        output = model(dummy_input)
+
+    if isinstance(output, tuple):
+        for i, o in enumerate(output):
+            print(f"Output {i} shape: {o.shape}")
+    else:
+        print("Output shape:", output.shape)
