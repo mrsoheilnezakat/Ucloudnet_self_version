@@ -1,5 +1,8 @@
 import paddle
 from paddle.io import DataLoader
+from paddle.nn.clip import ClipGradByNorm
+from paddle.nn.functional import binary_cross_entropy_with_logits as bce_logits
+
 import paddle.nn.functional as F
 import paddle.optimizer as optim
 import argparse
@@ -10,9 +13,7 @@ from utils.progressbar import ProgressBar
 
 
 def bce_loss(pred, target):
-    return F.binary_cross_entropy(
-        F.sigmoid(paddle.squeeze(pred, 1)), 
-        target)
+    return F.binary_cross_entropy(paddle.squeeze(pred, 1), target)
 
 def bce_loss_with_aux(pred, target, weight=[1, 0.4, 0.2]):
     return _bce_loss_with_aux(pred, paddle.unsqueeze(target, 1), weight)
@@ -56,11 +57,22 @@ def train(args):
     else:
         train_record_file.write("epoch,iteration,loss,acc\n")
 
+    clipper = ClipGradByNorm(clip_norm=1.0)
+
     if args.lr_decay == 1:
-        scheduler = paddle.optimizer.lr.ExponentialDecay(learning_rate=args.lr, gamma=0.95, verbose=True)
-        optimizer = optim.Adam(scheduler, parameters=model.parameters(), weight_decay=1e-3)
+        scheduler = paddle.optimizer.lr.ExponentialDecay(
+            learning_rate=args.lr, gamma=0.95, verbose=True)
+        optimizer = optim.Adam(
+            scheduler,
+            parameters=model.parameters(),
+            weight_decay=1e-3,
+            grad_clip=clipper)
     else:
-        optimizer = optim.Adam(args.lr, parameters=model.parameters(), weight_decay=1e-3)
+        optimizer = optim.Adam(
+            learning_rate=args.lr,
+            parameters=model.parameters(),
+            weight_decay=1e-3,
+            grad_clip=clipper)
 
     train_steps = len(train_loader)
     test_steps = len(test_loader)
@@ -75,21 +87,42 @@ def train(args):
         model.train()
 
         for i, (image, label) in enumerate(train_loader()):
+            # 1) normalize input
+            image = image.astype('float32') / 255.0
+
             optimizer.clear_grad()
+            
+            # 2) forward pass
             pred = model(image)
 
+             # 2) clamp everything
+            if isinstance(pred, (tuple, list)):
+                pred = tuple(paddle.clip(p, -10.0, 10.0) for p in pred)
+            else:
+                pred = paddle.clip(pred, -10.0, 10.0)
+
+            # 3) (optional) NaN check
+            if any(paddle.isnan(p).any() for p in (pred if isinstance(pred, (tuple, list)) else [pred])):
+                print("NaN detected in prediction!")
+                for p in (pred if isinstance(pred, (tuple, list)) else [pred]):
+                    print("Pred stats:", paddle.min(p), paddle.max(p))
+                exit(1)
+
+            # 4) loss
             if args.aux == 0:
                 loss = bce_loss(pred, label)
             else:
                 loss, (_1x_loss, _2x_loss, _4x_loss) = bce_loss_with_aux(pred, label)
 
-            loss.backward()
+            loss.backward(retain_graph=True)
             optimizer.step()
 
             batch_loss = loss.numpy()[0]
-            batch_acc = accuracy(pred, label, args.aux)
+            probs    = F.sigmoid(pred)
+            batch_acc = accuracy(probs, label, args.aux)
+
             train_loss += batch_loss
-            train_acc += batch_acc
+            train_acc  += batch_acc
 
             if i != train_steps-1:
                 bar.updateBar(
@@ -125,9 +158,12 @@ def train(args):
                 pred = model(image)
 
                 if args.aux == 0:
-                    loss = bce_loss(pred, label)
+                    loss = bce_logits(pred, label)
                 else:
-                    loss, (_1x_loss, _2x_loss, _4x_loss) = bce_loss_with_aux(pred, label)
+                    main = bce_logits(pred,      label)
+                    a2   = bce_logits(aux2_pred, label)
+                    a4   = bce_logits(aux4_pred, label)
+                    loss = main + a2 + a4
 
                 test_loss += loss.numpy()[0]
                 test_acc += accuracy(pred, label, args.aux)
@@ -191,5 +227,5 @@ if __name__ == "__main__":
     )
     
     args = parser.parse_args()
-    
+
     train(args)

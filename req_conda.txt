@@ -1,0 +1,56 @@
+astor
+backcall
+ca-certificates
+certifi
+charset-normalizer
+colorama
+cycler
+debugpy
+decorator
+entrypoints
+fonttools
+idna
+imageio
+ipykernel
+ipython
+jedi
+# jupyter-client
+# jupyter-core
+kiwisolver
+# matplotlib
+matplotlib-inline
+nest-asyncio
+# numpy
+# opencv-python
+# openssl
+packaging
+# paddlepaddle-gpu
+pandas
+parso
+pickleshare
+pillow
+pip
+prompt-toolkit
+protobuf
+pygments
+pyparsing
+# python
+python-dateutil
+# python_abi
+pytz
+pywin32
+pyzmq
+requests
+setuptools
+six
+# some-package
+# sqlite
+tornado
+traitlets
+tzdata
+ucrt
+# urllib3
+vc
+vs2015_runtime
+wcwidth
+wheel

@@ -27,9 +27,9 @@ class DoubleConv2d(nn.Layer):
         out = self.conv1(x)
         out = self.conv2(out)
         if self.in_channels != self.out_channels:
-            return out
+            return F.sigmoid(out)
         else:
-            return out + x
+            return F.sigmoid(out) + x
 
 class UNetDown(nn.Layer):
     def __init__(self, in_channels, out_channels):
@@ -40,7 +40,7 @@ class UNetDown(nn.Layer):
     def forward(self, x):
         out = self.pool(x)
         out = self.conv(out)
-        return out
+        return F.sigmoid(out)
         
 class UNetUp(nn.Layer):
     def __init__(self, in_channels, out_channels):
@@ -51,7 +51,7 @@ class UNetUp(nn.Layer):
     def forward(self, x):
         out = self.up(x)
         out = self.conv(out)
-        return out
+        return F.sigmoid(out)
 
 class UCloudNet(nn.Layer):
     def __init__(self, in_channels=1, base_channels=64, n_classes=2, aux=True):
@@ -122,11 +122,11 @@ class UCloudNet(nn.Layer):
 
         out = self.classifier(self.dp(out))
         if self.aux:
-            up_x2_out = self.aux_x2(up_x2)
-            up_x4_out = self.aux_x4(up_x4)
-            return out, up_x2_out, up_x4_out
-        else:
-            return out
+            up2 = self.aux_x2(up_x2)
+            up4 = self.aux_x4(up_x4)
+            # NO sigmoid, NO clip
+            return out, up2, up4
+        return out
 
 def _bce_loss_with_aux(pred, target, weight=[1, 0.4, 0.2]):
     # pred = (x1, x2, x4)
